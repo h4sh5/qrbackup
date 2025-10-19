@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QRbackup</title>
+<style>
+  * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+  body{font-family:system-ui, sans-serif; margin:2rem}
+  button{margin-top:1rem}
+  #log{white-space:pre-wrap; font-size:.8rem; background:#f6f6f6; padding:.5rem; max-height:12rem; overflow:auto}
+
+/*  for printing onto a4 pages*/
+ .page {
+    width: 210mm;
+    height: 297mm;
+    background: white;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    margin: 0 auto 0px auto;
+    padding: 16mm;
+    display: flex;
+    flex-direction: column;
+}
+
+.page-header {
+    height: 10mm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #333;
+    margin-bottom: 3mm;
+/*    border-bottom: 2px solid #333;*/
+}
+
+.page-content {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 5mm;
+}
+
+.image-container {
+    width: calc((100% - 15mm) / 4);
+    height: calc((100% - 25mm) / 6);
+    background: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+@media print {
+    body {
+        background: white;
+        padding: 0;
+        margin: 0;
+    }
+
+    .controls {
+        display: none;
+    }
+
+    .page {
+        width: 210mm;
+        height: 297mm;
+        box-shadow: none;
+        margin: 0;
+        page-break-after: always;
+    }
+
+    .page:last-child {
+        page-break-after: avoid;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    .page {
+        width: 100%;
+        max-width: 210mm;
+        height: auto;
+        min-height: 297mm;
+    }
+}
+
+</style>
+</head>
+<body>
+
+<section id="removeBeforePrint">
+
+<h1>qrback</h1>
+<p style="color:#bbb">*WebAssembly used, no server side processing. Files are not uploaded to any servers, preserving your privacy.</p>
+<p>Backup any file with printable paper copies using QR codes.</p>
+
+<form>
+<input type="file" id="fileInput">
+<button id="runBtn" disabled>Run</button>
+<nbsp>
+
+<input type="reset"/>
+</span>
+
+<div id="log">Log (open console for more): <br></div>
+
+</section>
+
+<div id="pagesContainer"></div>
+
+
+<script>
+const log = (...args) => {
+  const box = document.getElementById('log');
+  box.textContent += args.join(' ') + '\n';
+  box.scrollTop = box.scrollHeight;
+};
+const downloadBlob = (blob, name) => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+function divmod(a,b) {
+    var remainder = a
+    var quotient = 0
+    if (a >= b) {
+        remainder = a % b
+  quotient = (a - remainder) / b
+    }
+    return [ quotient, remainder ]
+  }
+
+
+// ----------- base45 -------------------
+
+const BASE45_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
+function fromCharCode(c) {
+  return BASE45_CHARSET.charAt(c);
+};
+
+
+function b45encode(uint8array) {
+  var output = [];
+
+  for (var i = 0, length = uint8array.length; i < length; i+=2) {
+    if (uint8array.length -i > 1) {
+       var x = (uint8array[i]<<8)+ uint8array[i+1]
+       var [ e, x ]  = divmod(x, 45*45)
+       var [ d, c ] = divmod(x, 45)
+       output.push(fromCharCode(c) + fromCharCode(d) + fromCharCode(e))
+   } else {
+       var x = uint8array[i]
+       var [ d, c ] = divmod(x, 45)
+       output.push(fromCharCode(c) + fromCharCode(d))
+   }
+  }
+  return output.join('')
+};
+
+
+
+b45decode = function decode(str) {
+  var output = []
+  var buf = []
+
+  for(var i = 0, length=str.length; i < length; i++) {
+     var j = BASE45_CHARSET.indexOf(str[i])
+     if (j < 0)
+            throw new Error('Base45 decode: unknown character');
+     buf.push(j)
+  }
+
+  for(var i = 0, length=buf.length; i < length; i+=3) {
+     var x = buf[i] + buf[i + 1] * 45
+     if (length - i >= 3) {
+        var [d, c] = divmod(x + buf[i + 2] * 45 * 45,256)
+        output.push(d)
+        output.push(c)
+     } else {
+       output.push(x)
+     }
+  }
+  return Buffer.from(output);
+};
+
+
+
+</script>
+
+  
+<script type="module">
+
+// qrinit can be called whatever
+import qrinit, {qr_svg, SvgOptions, Shape, ECL, Version} from './pkg/fast_qr.js';
+await qrinit();
+
+async function encodeFileToQRs (file) {
+  const _B45CHARSPERBYTE = 1.5; // log45(256) is around 1.45, round up
+  const QR_ALPHANUMERICMODE_MAX = 4296; // max alphanumeric chars?
+  const raw = new Uint8Array(await file.arrayBuffer());
+  // number of chunks divided by max size of qr code data encoding
+  const chunkSize = Math.floor(QR_ALPHANUMERICMODE_MAX/_B45CHARSPERBYTE);
+  // log(``)
+  console.log(`each chunk about ${chunkSize}`);
+  const chunks = [];
+  const images = [];
+  for (let i = 0; i < raw.length; i += chunkSize) {
+    chunks.push(raw.slice(i, i + chunkSize));
+  }
+  log(`Hang on.. (processing ${chunks.length} chunks)`);
+
+  let counter = 1;
+  let failed = 0;
+  const total = chunks.length;
+
+  
+
+  /* inner functions for generate QR code page spreads */
+  let currentPage = null;
+  let currentContent = null;
+  let pageIndex = 1;
+  let imageCount = 0;
+  const QRCODES_PER_PAGE = 24;
+
+  function createNewPage(totalCount) {
+            const page = document.createElement('div');
+            page.className = 'page';
+
+            const header = document.createElement('div');
+            header.className = 'page-header';
+            header.textContent = `${file.name} page ${pageIndex}/${totalCount}`;
+
+            const content = document.createElement('div');
+            content.className = 'page-content';
+
+            page.appendChild(header);
+            page.appendChild(content);
+
+            document.getElementById('pagesContainer').appendChild(page);
+
+            currentPage = page;
+            currentContent = content;
+            imageCount = 0;
+
+            pageIndex++;
+        }
+
+  function addImage(svgInnerHTML, totalCount) {
+      if (!currentContent || imageCount >= QRCODES_PER_PAGE) {
+          createNewPage(totalCount);
+      }
+      const imageContainer = document.createElement('div');
+      imageContainer.className = 'image-container';
+
+      imageContainer.innerHTML = svgInnerHTML;
+      currentContent.appendChild(imageContainer);
+
+      imageCount++;
+    }
+  /****************************************************/
+
+  for (const chunk of chunks) {
+    const opts = new SvgOptions()
+      .shape(Shape.Square)
+      .background_color('#ffffff')
+      .module_color('#000000')
+      .version(Version.V40) // max size
+      .ecl(ECL.L); // 7% error correct, most amount of data fit
+
+    // const b45 = encodeBase45(chunk); // base45 is most efficient for QR codes
+    const b45 = b45encode(chunk);
+    console.log(`${counter} chunk (size ${chunk.length})`);
+    console.log(`${counter} b45 (size ${b45.length})`);
+    const svg_qr_code = qr_svg(b45, opts);
+    // console.log("svg:", svg);
+    if (svg_qr_code == undefined) {
+      failed += 1;
+      log(`chunk ${counter}: SVG failed to generate`);
+    }
+    images.push(svg_qr_code);
+    counter++;
+  }
+
+  const pageCount =  Math.ceil(images.length/QRCODES_PER_PAGE);
+  for (var i = 0; i < images.length; i++) {
+    console.log(images[i]);
+    addImage(images[i], Math.ceil(images.length/QRCODES_PER_PAGE));
+  }
+
+  log(`generated ${images.length} QR codes across ${pageCount} pages`);
+
+}
+
+window.encodeFileToQRs = encodeFileToQRs;
+
+</script>
+
+<script>
+
+window.onbeforeprint = (event) => {
+  // hide elements that are not the generated pages before print
+  document.getElementById("removeBeforePrint").style.display = 'none';
+}
+
+const fileInput = document.getElementById('fileInput');
+const runBtn    = document.getElementById('runBtn');
+
+runBtn.disabled = !fileInput.files.length;
+
+fileInput.addEventListener('change', () => {
+  runBtn.disabled = !fileInput.files.length;
+});
+
+
+runBtn.addEventListener('click', async () => {
+  runBtn.disabled = true;
+  log('\nStarting... (please refresh the page before encoding another file)');
+
+  const file = fileInput.files[0];
+  await window.encodeFileToQRs(file);
+  console.log("finished");
+  runBtn.disabled = false;
+});
+
+</script>
+</body>
+</html>
