@@ -21,20 +21,23 @@
     background: white;
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
     margin: 0 auto 0px auto;
-    padding: 16mm;
+    padding: 1mm;
     display: flex;
     flex-direction: column;
 }
 
-.page-header {
-    height: 10mm;
-    display: flex;
+.page-note {
+    height: 1mm;
+    display: inline;
     align-items: center;
-    justify-content: center;
-    font-size: 10px;
+    justify-content: left;
+    font-size: 5px;
+    padding: 0;
+    margin-top: 0;
     color: #333;
-    margin-bottom: 3mm;
-/*    border-bottom: 2px solid #333;*/
+    margin-bottom: 0;
+    margin-top: -4px;
+    margin-left: 96%;
 }
 
 .page-content {
@@ -42,16 +45,18 @@
     display: flex;
     flex-wrap: wrap;
     align-content: flex-start;
-    gap: 5mm;
+    gap: 0mm;
 }
 
 .image-container {
-    width: calc((100% - 15mm) / 4);
-    height: calc((100% - 25mm) / 6);
+    width: calc((100% - 12mm) / 4);
+/*    height: calc((100% - 25mm) / 6);*/
     background: #f0f0f0;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 0;
+    box-sizing: unset;
 }
 
 
@@ -96,7 +101,7 @@
 
 <h1>qrback</h1>
 <p style="color:#bbb">*WebAssembly used, no server side processing. Files are not uploaded to any servers, preserving your privacy.</p>
-<p>Backup any file with printable paper copies using QR codes.</p>
+<p>Backup any file with printable paper copies using QR codes. For best results when restoring, scan in color with high resolution (600dpi+). Zbar (zbarimg) is a great tool to restore, and then use base45 to decode to the original file.</p>
 
 <form>
 <input type="file" id="fileInput">
@@ -233,17 +238,20 @@ async function encodeFileToQRs (file) {
             const page = document.createElement('div');
             page.className = 'page';
 
-            const header = document.createElement('div');
-            header.className = 'page-header';
-            header.textContent = `${file.name} page ${pageIndex}/${totalCount}`;
+            const pagenote = document.createElement('div');
+            pagenote.className = 'page-note';
+            pagenote.textContent = `${file.name} ${pageIndex}/${totalCount}`;
 
             const content = document.createElement('div');
             content.className = 'page-content';
 
-            page.appendChild(header);
+            page.appendChild(pagenote);
             page.appendChild(content);
+            
 
             document.getElementById('pagesContainer').appendChild(page);
+            const hline = document.createElement('hr');
+            document.getElementById('pagesContainer').appendChild(hline);
 
             currentPage = page;
             currentContent = content;
