@@ -101,7 +101,7 @@
 
 <h1>qrback</h1>
 <p style="color:#bbb">*WebAssembly used, no server side processing. Files are not uploaded to any servers, preserving your privacy.</p>
-<p>Backup any file with printable paper copies using QR codes. For best results when restoring, scan in color with high resolution (600dpi+). Zbar (zbarimg) is a great tool to restore, and then use base45 to decode to the original file.</p>
+<p>Backup any file with printable paper copies using QR codes. For best results when restoring, scan in color with high resolution (600dpi+). Each QR code contains a preamble of which chunk it is (for example "9/10:", followed by base45 encoded data of the chunk.</p>
 
 <form>
 <input type="file" id="fileInput">
@@ -209,10 +209,19 @@ await qrinit();
 
 async function encodeFileToQRs (file) {
   const _B45CHARSPERBYTE = 1.5; // log45(256) is around 1.45, round up
-  const QR_ALPHANUMERICMODE_MAX = 4296; // max alphanumeric chars?
+  const QR_ALPHANUMERICMODE_MAX = 4296; // max alphanumeric chars per V40 QR code
   const raw = new Uint8Array(await file.arrayBuffer());
+  // calculate approx number of raw chunks
+  const estNumChunks = Math.ceil(raw.length / (QR_ALPHANUMERICMODE_MAX/_B45CHARSPERBYTE));
+  log(`estimated number of chunks: ${estNumChunks}`);
+  // use that to generate the preamble size (preamble being the data marking which segment it is followed by '/' then total number of segments and then ':' e.g. 1/20: 12/20: etc. at the start of each chunk)
+  // the symbols in the preamble are intentionally part of the base45 scheme for efficient QR alphanumeric encoding
+  const preambleLength = estNumChunks.toString().length * 2 + 2; // so that the numchunks can be at most in there twice, followed by the two symbols, such as when there are 500 maximum chunks, the last chunk will have preamble 500/500:
+  log(`preambleLength: ${preambleLength}`)
+  let maxDataPerQR = QR_ALPHANUMERICMODE_MAX - preambleLength;
+  log("max data per QR:",maxDataPerQR);
   // number of chunks divided by max size of qr code data encoding
-  const chunkSize = Math.floor(QR_ALPHANUMERICMODE_MAX/_B45CHARSPERBYTE);
+  const chunkSize = Math.floor(maxDataPerQR/_B45CHARSPERBYTE);
   // log(``)
   console.log(`each chunk about ${chunkSize}`);
   const chunks = [];
@@ -286,9 +295,10 @@ async function encodeFileToQRs (file) {
 
     // const b45 = encodeBase45(chunk); // base45 is most efficient for QR codes
     const b45 = b45encode(chunk);
+    let preamble = `${counter}/${chunks.length}:`; // to mark which chunk it is for decoding
     console.log(`${counter} chunk (size ${chunk.length})`);
     console.log(`${counter} b45 (size ${b45.length})`);
-    const svg_qr_code = qr_svg(b45, opts);
+    const svg_qr_code = qr_svg(preamble + b45, opts);
     // console.log("svg:", svg);
     if (svg_qr_code == undefined) {
       failed += 1;
