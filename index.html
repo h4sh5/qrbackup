@@ -31,7 +31,7 @@
     display: inline;
     align-items: center;
     justify-content: left;
-    font-size: 5px;
+    font-size: 6px;
     padding: 0;
     margin-top: 0;
     color: #333;
@@ -97,7 +97,7 @@
 </head>
 <body>
 
-<section id="removeBeforePrint">
+<section class="removeBeforePrint">
 
 <h1>qrback</h1>
 <p style="color:#bbb">*WebAssembly used, no server side processing. Files are not uploaded to any servers, preserving your privacy.</p>
@@ -108,7 +108,8 @@
 <button id="runBtn" disabled>Run</button>
 <nbsp>
 
-<input type="reset"/>
+<input type="button" value="Print" onClick="window.print()">
+<input type="reset" onClick="window.location.reload();">
 </span>
 
 <div id="log">Log (open console for more): <br></div>
@@ -251,6 +252,7 @@ async function encodeFileToQRs (file) {
 
             document.getElementById('pagesContainer').appendChild(page);
             const hline = document.createElement('hr');
+            hline.className = 'removeBeforePrint';
             document.getElementById('pagesContainer').appendChild(hline);
 
             currentPage = page;
@@ -314,7 +316,10 @@ window.encodeFileToQRs = encodeFileToQRs;
 
 window.onbeforeprint = (event) => {
   // hide elements that are not the generated pages before print
-  document.getElementById("removeBeforePrint").style.display = 'none';
+  let elementsToHide = document.getElementsByClassName("removeBeforePrint");
+  for (let i = 0; i < elementsToHide.length; i++) {
+    elementsToHide[i].style.display = 'none';
+  }
 }
 
 const fileInput = document.getElementById('fileInput');
