@@ -99,9 +99,11 @@
 
 <section class="removeBeforePrint">
 
-<h1>qrback</h1>
+<h1>QRBackup</h1>
 <p style="color:#bbb">*WebAssembly used, no server side processing. Files are not uploaded to any servers, preserving your privacy.</p>
-<p>Backup any file with printable paper copies using QR codes. For best results when restoring, scan in color with high resolution (600dpi+). Each QR code contains a preamble of which chunk it is (for example "9/10:", followed by base45 encoded data of the chunk.</p>
+<p>Backup any file with printable paper copies using QR codes. For best results when restoring, scan in color with high resolution (600dpi+). Each QR code contains a preamble of which chunk it is (for example "9/10:", followed by <a target=_blank href=https://datatracker.ietf.org/doc/rfc9285/>base45</a> encoded data of the chunk.</p>
+
+<p>Use this page to <a href='./restore.html'>restore</a>.</p>
 
 <form>
 <input type="file" id="fileInput">
@@ -146,7 +148,7 @@ function divmod(a,b) {
 
 // ----------- base45 -------------------
 
-const BASE45_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
+const BASE45_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
 function fromCharCode(c) {
   return BASE45_CHARSET.charAt(c);
 };
@@ -169,33 +171,6 @@ function b45encode(uint8array) {
   }
   return output.join('')
 };
-
-
-
-b45decode = function decode(str) {
-  var output = []
-  var buf = []
-
-  for(var i = 0, length=str.length; i < length; i++) {
-     var j = BASE45_CHARSET.indexOf(str[i])
-     if (j < 0)
-            throw new Error('Base45 decode: unknown character');
-     buf.push(j)
-  }
-
-  for(var i = 0, length=buf.length; i < length; i+=3) {
-     var x = buf[i] + buf[i + 1] * 45
-     if (length - i >= 3) {
-        var [d, c] = divmod(x + buf[i + 2] * 45 * 45,256)
-        output.push(d)
-        output.push(c)
-     } else {
-       output.push(x)
-     }
-  }
-  return Buffer.from(output);
-};
-
 
 
 </script>
